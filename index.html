@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#10141f">
+<title>Cuaderno — plan 12 semanas</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="stamp">Ciclo · 12 semanas</div>
+  <h1>Cuaderno de entrenamiento</h1>
+  <p>Registro de fuerza, peso y comidas</p>
+</header>
+
+<main>
+
+  <!-- ================= HOY ================= -->
+  <section class="view active" id="view-hoy">
+    <div class="card" id="hoy-resumen"></div>
+    <div class="card" id="hoy-comidas"></div>
+    <div class="card" id="hoy-manana"></div>
+  </section>
+
+  <!-- ================= ENTRENO ================= -->
+  <section class="view" id="view-entreno">
+    <div class="pillrow" id="workout-pills"></div>
+    <div class="card" id="workout-card"></div>
+  </section>
+
+  <!-- ================= PESO ================= -->
+  <section class="view" id="view-peso">
+    <div class="card">
+      <h2>Registrar peso <span class="tag">3x/semana o más</span></h2>
+      <div class="weight-input-row">
+        <input type="number" step="0.1" inputmode="decimal" id="weight-input" placeholder="Ej. 79.4">
+        <button id="weight-save">Guardar</button>
+      </div>
+      <div class="chart-wrap"><canvas id="weight-chart"></canvas></div>
+      <div class="trend-readout" id="weight-trend"></div>
+    </div>
+    <div class="card">
+      <h2>Historial</h2>
+      <div class="weight-history" id="weight-history"></div>
+    </div>
+  </section>
+
+  <!-- ================= COMIDAS ================= -->
+  <section class="view" id="view-comidas">
+    <div class="pillrow" id="meal-mode-pills">
+      <button class="pill active" data-mode="dia">Día</button>
+      <button class="pill" data-mode="semana">Semana</button>
+    </div>
+    <div id="meal-day-pills-wrap">
+      <div class="pillrow" id="meal-pills"></div>
+    </div>
+    <div class="card" id="meal-card"></div>
+  </section>
+
+  <!-- ================= COMPRA ================= -->
+  <section class="view" id="view-compra">
+    <div class="card">
+      <h2>¿Qué días quieres comprar? <span class="tag">marca los que apliquen</span></h2>
+      <div class="daycheck-grid" id="compra-daychecks"></div>
+      <button class="ghost" id="compra-select-all" style="margin-top:10px;width:100%;">Marcar / desmarcar todos</button>
+    </div>
+    <div class="card" id="compra-list"></div>
+  </section>
+
+</main>
+
+<nav class="tabbar">
+  <button data-view="hoy" class="active"><span class="dot"></span>Hoy</button>
+  <button data-view="entreno"><span class="dot"></span>Entreno</button>
+  <button data-view="peso"><span class="dot"></span>Peso</button>
+  <button data-view="comidas"><span class="dot"></span>Comidas</button>
+  <button data-view="compra"><span class="dot"></span>Compra</button>
+</nav>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
