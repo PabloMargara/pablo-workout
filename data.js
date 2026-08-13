@@ -7,38 +7,40 @@ const TARGETS = {
 };
 
 // ---- Plantillas de entrenamiento (full-body 3x/semana) ----
+// Cada ejercicio: scheme (series x reps a mostrar), rest (descanso por defecto en segundos,
+// editable luego en la app), type ("reps" = peso+reps, "time" = duración+rondas, para isométricos).
 const WORKOUTS = {
   A: {
     name: "Día A",
     exercises: [
-      { name: "Sentadilla o prensa", scheme: "4 x 6-8" },
-      { name: "Press banca", scheme: "4 x 6-8" },
-      { name: "Remo con barra o máquina", scheme: "4 x 8-10" },
-      { name: "Press militar mancuerna", scheme: "3 x 8-10" },
-      { name: "Curl femoral", scheme: "3 x 10-12" },
-      { name: "Plancha", scheme: "3 x 30-45 seg" },
+      { name: "Sentadilla o prensa", scheme: "4 x 6-8", rest: 120, type: "reps" },
+      { name: "Press banca", scheme: "4 x 6-8", rest: 120, type: "reps" },
+      { name: "Remo con barra o máquina", scheme: "4 x 8-10", rest: 90, type: "reps" },
+      { name: "Press militar mancuerna", scheme: "3 x 8-10", rest: 90, type: "reps" },
+      { name: "Curl femoral", scheme: "3 x 10-12", rest: 60, type: "reps" },
+      { name: "Plancha", scheme: "3 rondas x 30-45 seg", rest: 45, type: "time" },
     ],
   },
   B: {
     name: "Día B",
     exercises: [
-      { name: "Peso muerto (rumano o convencional)", scheme: "4 x 6-8" },
-      { name: "Dominadas o jalón al pecho", scheme: "4 x 8-10" },
-      { name: "Press inclinado mancuerna", scheme: "3 x 8-10" },
-      { name: "Zancadas", scheme: "3 x 10/pierna" },
-      { name: "Face pull", scheme: "3 x 12-15" },
-      { name: "Curl bíceps + extensión tríceps", scheme: "3 x 10-12" },
+      { name: "Peso muerto (rumano o convencional)", scheme: "4 x 6-8", rest: 150, type: "reps" },
+      { name: "Dominadas o jalón al pecho", scheme: "4 x 8-10", rest: 90, type: "reps" },
+      { name: "Press inclinado mancuerna", scheme: "3 x 8-10", rest: 90, type: "reps" },
+      { name: "Zancadas", scheme: "3 x 10/pierna", rest: 75, type: "reps" },
+      { name: "Face pull", scheme: "3 x 12-15", rest: 60, type: "reps" },
+      { name: "Curl bíceps + extensión tríceps", scheme: "3 x 10-12", rest: 60, type: "reps" },
     ],
   },
   C: {
     name: "Día C",
     exercises: [
-      { name: "Sentadilla frontal o hack squat", scheme: "4 x 8-10" },
-      { name: "Press banca agarre cerrado", scheme: "3 x 8-10" },
-      { name: "Remo unilateral mancuerna", scheme: "3 x 10-12" },
-      { name: "Elevaciones laterales", scheme: "3 x 12-15" },
-      { name: "Hip thrust", scheme: "3 x 10-12" },
-      { name: "Core (rueda o cable)", scheme: "3 x 12-15" },
+      { name: "Sentadilla frontal o hack squat", scheme: "4 x 8-10", rest: 120, type: "reps" },
+      { name: "Press banca agarre cerrado", scheme: "3 x 8-10", rest: 90, type: "reps" },
+      { name: "Remo unilateral mancuerna", scheme: "3 x 10-12", rest: 75, type: "reps" },
+      { name: "Elevaciones laterales", scheme: "3 x 12-15", rest: 60, type: "reps" },
+      { name: "Hip thrust", scheme: "3 x 10-12", rest: 90, type: "reps" },
+      { name: "Core (rueda o cable)", scheme: "3 x 12-15", rest: 60, type: "reps" },
     ],
   },
 };

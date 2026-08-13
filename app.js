@@ -15,6 +15,12 @@ function saveStore(s) {
 }
 let store = loadStore();
 
+// Iconos SVG inline (sin dependencias externas) — sustituyen a los emoji como iconos funcionales.
+const ICON_X = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+const ICON_PLAY = `<svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
+const ICON_CLOCK = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6"/><path d="M12 2v3"/></svg>`;
+const ICON_STOP = `<svg class="icon" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
+
 // Inicializa la plantilla editable de ejercicios (copia de WORKOUTS la primera vez,
 // luego vive en store y el usuario puede añadir/quitar libremente).
 if (!store.workoutPlan) store.workoutPlan = {};
@@ -231,6 +237,8 @@ function renderCompraView() {
 
 // ================= Vista: ENTRENO =================
 let currentWorkoutDay = "A";
+let stopwatches = {}; // idx -> { running, start, interval }
+let restTimers = {};  // idx -> intervalId
 
 function getLastSession(dayKey, exerciseName) {
   const entries = Object.entries(store.workouts)
@@ -239,11 +247,101 @@ function getLastSession(dayKey, exerciseName) {
   for (const [iso, w] of entries) {
     const ex = w.exercises.find((e) => e.name === exerciseName);
     if (ex && ex.sets.length) {
-      const best = ex.sets.reduce((a, b) => (b.w > a.w ? b : a), ex.sets[0]);
-      return { iso, best };
+      return { iso, set: ex.sets[0] };
     }
   }
   return null;
+}
+
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+  } catch (e) { /* audio no disponible, seguimos sin sonido */ }
+}
+
+function startRestTimer(idx, seconds) {
+  const btn = document.querySelector(`[data-rest-start="${idx}"]`);
+  const countdownEl = document.getElementById(`rest-countdown-${idx}`);
+  if (!btn || !countdownEl) return;
+  btn.style.display = "none";
+  countdownEl.style.display = "flex";
+  let remaining = seconds;
+
+  const render = () => {
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    countdownEl.innerHTML = `
+      <span class="rc-time">${m}:${String(s).padStart(2, "0")}</span>
+      <button class="rc-cancel" data-rest-cancel="${idx}">Cancelar</button>
+    `;
+    document.querySelector(`[data-rest-cancel="${idx}"]`).addEventListener("click", () => cancelRestTimer(idx));
+  };
+  render();
+
+  restTimers[idx] = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) {
+      clearInterval(restTimers[idx]);
+      countdownEl.innerHTML = `<span class="rc-done">¡Descanso terminado!</span>`;
+      playBeep();
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      setTimeout(() => {
+        if (countdownEl) countdownEl.style.display = "none";
+        if (btn) btn.style.display = "block";
+      }, 3000);
+      return;
+    }
+    render();
+  }, 1000);
+}
+
+function cancelRestTimer(idx) {
+  clearInterval(restTimers[idx]);
+  const countdownEl = document.getElementById(`rest-countdown-${idx}`);
+  const btn = document.querySelector(`[data-rest-start="${idx}"]`);
+  if (countdownEl) countdownEl.style.display = "none";
+  if (btn) btn.style.display = "block";
+}
+
+function toggleStopwatch(idx) {
+  const btn = document.querySelector(`[data-stopwatch="${idx}"]`);
+  if (!btn) return;
+  if (!stopwatches[idx] || !stopwatches[idx].running) {
+    stopwatches[idx] = { running: true, start: Date.now(), interval: null };
+    btn.innerHTML = `${ICON_STOP}<span class="sw-label">Detener (0s)</span>`;
+    btn.classList.add("running");
+    stopwatches[idx].interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - stopwatches[idx].start) / 1000);
+      const lbl = btn.querySelector(".sw-label");
+      if (lbl) lbl.textContent = `Detener (${elapsed}s)`;
+    }, 250);
+  } else {
+    clearInterval(stopwatches[idx].interval);
+    const elapsed = Math.floor((Date.now() - stopwatches[idx].start) / 1000);
+    stopwatches[idx].running = false;
+    btn.innerHTML = `${ICON_CLOCK}<span class="sw-label">Cronometrar</span>`;
+    btn.classList.remove("running");
+    const durInput = document.querySelector(`.exercise-row[data-ex="${idx}"] .in-duration`);
+    if (durInput) durInput.value = elapsed;
+  }
+}
+
+function adjustRest(dayKey, idx, delta) {
+  const ex = store.workoutPlan[dayKey][idx];
+  ex.rest = Math.min(300, Math.max(15, (ex.rest || 60) + delta));
+  saveStore(store);
+  const valEl = document.getElementById(`rest-value-${idx}`);
+  const btnValEl = document.getElementById(`rest-btn-val-${idx}`);
+  if (valEl) valEl.textContent = `${ex.rest}s`;
+  if (btnValEl) btnValEl.textContent = ex.rest;
 }
 
 function renderWorkoutView(dayKey) {
@@ -253,30 +351,62 @@ function renderWorkoutView(dayKey) {
   ).join("");
 
   const dayName = WORKOUTS[dayKey].name;
-  const exList = store.workoutPlan[dayKey]; // editable: nombre + esquema
-  const existing = store.workouts[todayISO()];
+  const exList = store.workoutPlan[dayKey];
+  const today = todayISO();
+  const existing = store.workouts[today];
   const alreadyLoggedToday = existing && existing.day === dayKey;
 
   const rows = exList.map((ex, i) => {
+    const isTime = ex.type === "time";
+    const restVal = ex.rest || 60;
     const last = getLastSession(dayKey, ex.name);
-    const lastText = last
-      ? `Última vez (${fmtDate(last.iso)}): ${last.best.w}kg x ${last.best.r}`
-      : "Sin registros previos — anota tu primera marca";
-    const savedSets = alreadyLoggedToday
-      ? existing.exercises.find((e) => e.name === ex.name)
-      : null;
-    const w0 = savedSets && savedSets.sets[0] ? savedSets.sets[0].w : "";
-    const r0 = savedSets && savedSets.sets[0] ? savedSets.sets[0].r : "";
+    let lastText;
+    if (!last) {
+      lastText = "Sin registros previos — anota tu primera marca";
+    } else if (isTime) {
+      lastText = `Última vez (${fmtDate(last.iso)}): ${last.set.duration}seg x ${last.set.rounds} rondas`;
+    } else {
+      lastText = `Última vez (${fmtDate(last.iso)}): ${last.set.w}kg x ${last.set.r}`;
+    }
+
+    const savedSets = alreadyLoggedToday ? existing.exercises.find((e) => e.name === ex.name) : null;
+    let w0 = "", r0 = "", d0 = "", rd0 = "";
+    if (savedSets && savedSets.sets[0]) {
+      if (isTime) { d0 = savedSets.sets[0].duration; rd0 = savedSets.sets[0].rounds; }
+      else { w0 = savedSets.sets[0].w; r0 = savedSets.sets[0].r; }
+    }
+
+    const inputsHtml = isTime ? `
+      <div class="set-inputs">
+        <input type="number" inputmode="numeric" placeholder="Duración (seg)" class="in-duration" value="${d0}">
+        <input type="number" inputmode="numeric" placeholder="Rondas" class="in-rounds" value="${rd0}">
+      </div>
+      <button class="ghost stopwatch-btn" data-stopwatch="${i}">${ICON_CLOCK}<span class="sw-label">Cronometrar</span></button>
+    ` : `
+      <div class="set-inputs">
+        <input type="number" step="0.5" inputmode="decimal" placeholder="Peso (kg)" class="in-weight" value="${w0}">
+        <input type="number" inputmode="numeric" placeholder="Reps" class="in-reps" value="${r0}">
+      </div>
+    `;
 
     return `
       <div class="exercise-row" data-ex="${i}">
-        <button class="ex-remove" data-remove="${i}" aria-label="Quitar ejercicio">×</button>
+        <button class="ex-remove" data-remove="${i}" aria-label="Quitar ejercicio">${ICON_X}</button>
         <div class="ex-name">${ex.name}</div>
         <div class="ex-scheme">${ex.scheme}</div>
         <div class="ex-last">${lastText}</div>
-        <div class="set-inputs">
-          <input type="number" step="0.5" inputmode="decimal" placeholder="Peso (kg)" class="in-weight" value="${w0}">
-          <input type="number" inputmode="numeric" placeholder="Reps" class="in-reps" value="${r0}">
+        <div class="ex-rest-row">
+          <span class="ex-rest-label">Descanso</span>
+          <div class="ex-rest-stepper">
+            <button type="button" data-rest-minus="${i}" aria-label="Menos descanso">−</button>
+            <span class="ex-rest-value" id="rest-value-${i}">${restVal}s</span>
+            <button type="button" data-rest-plus="${i}" aria-label="Más descanso">+</button>
+          </div>
+        </div>
+        ${inputsHtml}
+        <div class="rest-timer">
+          <button class="rest-start-btn" data-rest-start="${i}">${ICON_PLAY}Iniciar descanso (<span id="rest-btn-val-${i}">${restVal}</span>s)</button>
+          <div class="rest-countdown" id="rest-countdown-${i}" style="display:none;"></div>
         </div>
       </div>`;
   }).join("");
@@ -290,6 +420,11 @@ function renderWorkoutView(dayKey) {
       <div class="add-exercise-inputs">
         <input type="text" id="new-ex-name" placeholder="Nombre del ejercicio">
         <input type="text" id="new-ex-scheme" placeholder="Series x reps (ej. 3 x 10-12)">
+        <select id="new-ex-type">
+          <option value="reps">Reps y peso</option>
+          <option value="time">Tiempo (ej. plancha)</option>
+        </select>
+        <input type="number" id="new-ex-rest" placeholder="Descanso (seg)" value="60">
       </div>
       <button class="ghost" id="add-exercise-btn" style="width:100%;">+ Añadir ejercicio</button>
     </div>
@@ -309,13 +444,35 @@ function renderWorkoutView(dayKey) {
     });
   });
 
+  document.querySelectorAll("[data-rest-minus]").forEach((btn) => {
+    btn.addEventListener("click", () => adjustRest(dayKey, parseInt(btn.dataset.restMinus, 10), -15));
+  });
+  document.querySelectorAll("[data-rest-plus]").forEach((btn) => {
+    btn.addEventListener("click", () => adjustRest(dayKey, parseInt(btn.dataset.restPlus, 10), 15));
+  });
+
+  document.querySelectorAll("[data-rest-start]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.restStart, 10);
+      startRestTimer(idx, exList[idx].rest || 60);
+    });
+  });
+
+  document.querySelectorAll(".stopwatch-btn").forEach((btn) => {
+    btn.addEventListener("click", () => toggleStopwatch(parseInt(btn.dataset.stopwatch, 10)));
+  });
+
   document.getElementById("add-exercise-btn").addEventListener("click", () => {
     const nameInput = document.getElementById("new-ex-name");
     const schemeInput = document.getElementById("new-ex-scheme");
+    const typeSel = document.getElementById("new-ex-type");
+    const restInput = document.getElementById("new-ex-rest");
     const name = nameInput.value.trim();
     const scheme = schemeInput.value.trim() || "3 x 10-12";
+    const type = typeSel.value;
+    const rest = parseInt(restInput.value, 10) || 60;
     if (!name) { nameInput.focus(); return; }
-    store.workoutPlan[dayKey].push({ name, scheme });
+    store.workoutPlan[dayKey].push({ name, scheme, type, rest });
     saveStore(store);
     renderWorkoutView(dayKey);
   });
@@ -329,12 +486,22 @@ function renderWorkoutView(dayKey) {
   document.getElementById("save-workout").addEventListener("click", () => {
     const exercises = [];
     document.querySelectorAll("#workout-card .exercise-row").forEach((row, i) => {
-      const wVal = parseFloat(row.querySelector(".in-weight").value);
-      const rVal = parseInt(row.querySelector(".in-reps").value, 10);
-      exercises.push({
-        name: exList[i].name,
-        sets: (!isNaN(wVal) && !isNaN(rVal)) ? [{ w: wVal, r: rVal }] : [],
-      });
+      const ex = exList[i];
+      if (ex.type === "time") {
+        const dVal = parseInt(row.querySelector(".in-duration").value, 10);
+        const rdVal = parseInt(row.querySelector(".in-rounds").value, 10);
+        exercises.push({
+          name: ex.name,
+          sets: (!isNaN(dVal) && !isNaN(rdVal)) ? [{ duration: dVal, rounds: rdVal }] : [],
+        });
+      } else {
+        const wVal = parseFloat(row.querySelector(".in-weight").value);
+        const rVal = parseInt(row.querySelector(".in-reps").value, 10);
+        exercises.push({
+          name: ex.name,
+          sets: (!isNaN(wVal) && !isNaN(rVal)) ? [{ w: wVal, r: rVal }] : [],
+        });
+      }
     });
     store.workouts[todayISO()] = { day: dayKey, exercises };
     saveStore(store);

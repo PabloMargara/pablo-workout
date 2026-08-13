@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#10141f">
 <title>Cuaderno — plan 12 semanas</title>
 <link rel="stylesheet" href="style.css">
@@ -72,11 +72,26 @@
 </main>
 
 <nav class="tabbar">
-  <button data-view="hoy" class="active"><span class="dot"></span>Hoy</button>
-  <button data-view="entreno"><span class="dot"></span>Entreno</button>
-  <button data-view="peso"><span class="dot"></span>Peso</button>
-  <button data-view="comidas"><span class="dot"></span>Comidas</button>
-  <button data-view="compra"><span class="dot"></span>Compra</button>
+  <button data-view="hoy" class="active">
+    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
+    <span>Hoy</span>
+  </button>
+  <button data-view="entreno">
+    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="12" x2="18" y2="12"/><rect x="2" y="8" width="3" height="8" rx="1"/><rect x="19" y="8" width="3" height="8" rx="1"/><rect x="5" y="9.5" width="2" height="5"/><rect x="17" y="9.5" width="2" height="5"/></svg>
+    <span>Entreno</span>
+  </button>
+  <button data-view="peso">
+    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v4l3 2"/></svg>
+    <span>Peso</span>
+  </button>
+  <button data-view="comidas">
+    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v7a2 2 0 0 0 4 0V2"/><path d="M9 9v13"/><path d="M16 2c-1.4 0-2 1.3-2 3v4c0 1 .9 2 2 2v9"/></svg>
+    <span>Comidas</span>
+  </button>
+  <button data-view="compra">
+    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.3 12a2 2 0 0 0 2 1.6h8.4a2 2 0 0 0 2-1.5L21 8H6.2"/></svg>
+    <span>Compra</span>
+  </button>
 </nav>
 
 <script src="data.js"></script>
