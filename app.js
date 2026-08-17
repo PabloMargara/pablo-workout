@@ -25,6 +25,16 @@ if (!store.workoutPlan) store.workoutPlan = {};
 Object.keys(WORKOUTS).forEach((k) => {
   if (!store.workoutPlan[k]) {
     store.workoutPlan[k] = WORKOUTS[k].exercises.map((e) => ({ ...e }));
+  } else {
+    // Migración: rellena campos que puedan faltar en datos guardados con una versión
+    // anterior de la app (ej. setsCount no existía todavía). Nunca toca las series
+    // ya registradas (viven en store.workouts, no aquí).
+    store.workoutPlan[k].forEach((ex) => {
+      const template = WORKOUTS[k].exercises.find((t) => t.name === ex.name);
+      if (ex.setsCount === undefined) ex.setsCount = template ? template.setsCount : 3;
+      if (ex.rest === undefined) ex.rest = template ? template.rest : 60;
+      if (ex.type === undefined) ex.type = template ? template.type : "reps";
+    });
   }
 });
 saveStore(store);
@@ -376,6 +386,13 @@ function cancelGlobalRestTimer() {
   document.getElementById("global-rest-bar").style.display = "none";
 }
 document.getElementById("grb-cancel").addEventListener("click", cancelGlobalRestTimer);
+document.getElementById("grb-plus30").addEventListener("click", () => {
+  if (globalRestTimer) {
+    globalRestTimer.endsAt += 30000;
+    saveGlobalRestTimer();
+    renderGlobalRestBar();
+  }
+});
 
 // Al cargar la app: si había un descanso en marcha (aunque se recargara la página), lo recupera.
 (function restoreRestTimer() {
