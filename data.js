@@ -7,40 +7,41 @@ const TARGETS = {
 };
 
 // ---- Plantillas de entrenamiento (full-body 3x/semana) ----
-// Cada ejercicio: scheme (series x reps a mostrar), rest (descanso por defecto en segundos,
-// editable luego en la app), type ("reps" = peso+reps, "time" = duración+rondas, para isométricos).
+// Cada ejercicio: scheme (texto informativo), rest (descanso por defecto en segundos, editable),
+// type ("reps" = peso+reps por serie, "time" = duración por serie, para isométricos),
+// setsCount (número de series a registrar individualmente).
 const WORKOUTS = {
   A: {
     name: "Día A",
     exercises: [
-      { name: "Sentadilla o prensa", scheme: "4 x 6-8", rest: 120, type: "reps" },
-      { name: "Press banca", scheme: "4 x 6-8", rest: 120, type: "reps" },
-      { name: "Remo con barra o máquina", scheme: "4 x 8-10", rest: 90, type: "reps" },
-      { name: "Press militar mancuerna", scheme: "3 x 8-10", rest: 90, type: "reps" },
-      { name: "Curl femoral", scheme: "3 x 10-12", rest: 60, type: "reps" },
-      { name: "Plancha", scheme: "3 rondas x 30-45 seg", rest: 45, type: "time" },
+      { name: "Sentadilla o prensa", scheme: "4 x 6-8", rest: 120, type: "reps", setsCount: 4 },
+      { name: "Press banca", scheme: "4 x 6-8", rest: 120, type: "reps", setsCount: 4 },
+      { name: "Remo con barra o máquina", scheme: "4 x 8-10", rest: 90, type: "reps", setsCount: 4 },
+      { name: "Press militar mancuerna", scheme: "3 x 8-10", rest: 90, type: "reps", setsCount: 3 },
+      { name: "Curl femoral", scheme: "3 x 10-12", rest: 60, type: "reps", setsCount: 3 },
+      { name: "Plancha", scheme: "3 x 30-45 seg", rest: 45, type: "time", setsCount: 3 },
     ],
   },
   B: {
     name: "Día B",
     exercises: [
-      { name: "Peso muerto (rumano o convencional)", scheme: "4 x 6-8", rest: 150, type: "reps" },
-      { name: "Dominadas o jalón al pecho", scheme: "4 x 8-10", rest: 90, type: "reps" },
-      { name: "Press inclinado mancuerna", scheme: "3 x 8-10", rest: 90, type: "reps" },
-      { name: "Zancadas", scheme: "3 x 10/pierna", rest: 75, type: "reps" },
-      { name: "Face pull", scheme: "3 x 12-15", rest: 60, type: "reps" },
-      { name: "Curl bíceps + extensión tríceps", scheme: "3 x 10-12", rest: 60, type: "reps" },
+      { name: "Peso muerto (rumano o convencional)", scheme: "4 x 6-8", rest: 150, type: "reps", setsCount: 4 },
+      { name: "Dominadas o jalón al pecho", scheme: "4 x 8-10", rest: 90, type: "reps", setsCount: 4 },
+      { name: "Press inclinado mancuerna", scheme: "3 x 8-10", rest: 90, type: "reps", setsCount: 3 },
+      { name: "Zancadas", scheme: "3 x 10/pierna", rest: 75, type: "reps", setsCount: 3 },
+      { name: "Face pull", scheme: "3 x 12-15", rest: 60, type: "reps", setsCount: 3 },
+      { name: "Curl bíceps + extensión tríceps", scheme: "3 x 10-12", rest: 60, type: "reps", setsCount: 3 },
     ],
   },
   C: {
     name: "Día C",
     exercises: [
-      { name: "Sentadilla frontal o hack squat", scheme: "4 x 8-10", rest: 120, type: "reps" },
-      { name: "Press banca agarre cerrado", scheme: "3 x 8-10", rest: 90, type: "reps" },
-      { name: "Remo unilateral mancuerna", scheme: "3 x 10-12", rest: 75, type: "reps" },
-      { name: "Elevaciones laterales", scheme: "3 x 12-15", rest: 60, type: "reps" },
-      { name: "Hip thrust", scheme: "3 x 10-12", rest: 90, type: "reps" },
-      { name: "Core (rueda o cable)", scheme: "3 x 12-15", rest: 60, type: "reps" },
+      { name: "Sentadilla frontal o hack squat", scheme: "4 x 8-10", rest: 120, type: "reps", setsCount: 4 },
+      { name: "Press banca agarre cerrado", scheme: "3 x 8-10", rest: 90, type: "reps", setsCount: 3 },
+      { name: "Remo unilateral mancuerna", scheme: "3 x 10-12", rest: 75, type: "reps", setsCount: 3 },
+      { name: "Elevaciones laterales", scheme: "3 x 12-15", rest: 60, type: "reps", setsCount: 3 },
+      { name: "Hip thrust", scheme: "3 x 10-12", rest: 90, type: "reps", setsCount: 3 },
+      { name: "Core (rueda o cable)", scheme: "3 x 12-15", rest: 60, type: "reps", setsCount: 3 },
     ],
   },
 };

@@ -18,8 +18,6 @@ let store = loadStore();
 // Iconos SVG inline (sin dependencias externas) — sustituyen a los emoji como iconos funcionales.
 const ICON_X = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
 const ICON_PLAY = `<svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
-const ICON_CLOCK = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6"/><path d="M12 2v3"/></svg>`;
-const ICON_STOP = `<svg class="icon" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
 
 // Inicializa la plantilla editable de ejercicios (copia de WORKOUTS la primera vez,
 // luego vive en store y el usuario puede añadir/quitar libremente).
@@ -237,9 +235,11 @@ function renderCompraView() {
 
 // ================= Vista: ENTRENO =================
 let currentWorkoutDay = "A";
-let stopwatches = {}; // idx -> { running, start, interval }
-let restTimers = {};  // idx -> intervalId
+let setTimers = {};        // "exIdx-setIdx" -> { start, interval }
+let globalRestTimer = null; // { endsAt, interval, exerciseName }
 let audioCtx = null;
+
+const ICON_CHECK = `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
 
 function getAudioContext() {
   if (!audioCtx) {
@@ -251,114 +251,73 @@ function getAudioContext() {
   return audioCtx;
 }
 
+// Truco estándar para desbloquear audio en iOS: reproducir un buffer silencioso
+// DENTRO del propio gesto táctil. resume() solo no siempre basta en WebKit.
+function unlockAudio() {
+  const ctx = getAudioContext();
+  try {
+    const buffer = ctx.createBuffer(1, 1, 22050);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
+  } catch (e) { /* seguimos sin sonido */ }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && audioCtx && audioCtx.state === "suspended") {
+    audioCtx.resume();
+  }
+  if (!document.hidden && globalRestTimer) {
+    renderGlobalRestBar(); // recalcula contra el reloj real al volver
+  }
+});
+
+function playBeep() {
+  try {
+    const ctx = getAudioContext();
+    const mk = (freq, delayMs, dur) => {
+      setTimeout(() => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.28, ctx.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+        osc.start();
+        osc.stop(ctx.currentTime + dur + 0.05);
+      }, delayMs);
+    };
+    mk(880, 0, 0.5);
+    mk(1046, 250, 0.4);
+  } catch (e) { /* audio no disponible, seguimos sin sonido */ }
+}
+
 function getLastSession(dayKey, exerciseName) {
   const entries = Object.entries(store.workouts)
     .filter(([iso, w]) => w.day === dayKey)
     .sort((a, b) => (a[0] < b[0] ? 1 : -1));
   for (const [iso, w] of entries) {
-    const ex = w.exercises.find((e) => e.name === exerciseName);
-    if (ex && ex.sets.length) {
-      return { iso, set: ex.sets[0] };
+    const savedEx = w.exercises && w.exercises[exerciseName];
+    if (savedEx && savedEx.sets && savedEx.sets.some(Boolean)) {
+      const doneSets = savedEx.sets.filter(Boolean);
+      return { iso, lastSet: doneSets[doneSets.length - 1], sets: doneSets };
     }
   }
   return null;
 }
 
-function playBeep() {
-  try {
-    const ctx = getAudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.6);
-    // Segundo pitido más agudo, para que se note aunque el primero se pierda
-    setTimeout(() => {
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.frequency.value = 1046;
-      gain2.gain.setValueAtTime(0.001, ctx.currentTime);
-      gain2.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
-      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-      osc2.start();
-      osc2.stop(ctx.currentTime + 0.45);
-    }, 250);
-  } catch (e) { /* audio no disponible, seguimos sin sonido */ }
-}
-
-function startRestTimer(idx, seconds) {
-  getAudioContext(); // desbloquear audio aquí, dentro del toque real del usuario
-  const btn = document.querySelector(`[data-rest-start="${idx}"]`);
-  const countdownEl = document.getElementById(`rest-countdown-${idx}`);
-  if (!btn || !countdownEl) return;
-  btn.style.display = "none";
-  countdownEl.style.display = "flex";
-  let remaining = seconds;
-
-  const render = () => {
-    const m = Math.floor(remaining / 60);
-    const s = remaining % 60;
-    countdownEl.innerHTML = `
-      <span class="rc-time">${m}:${String(s).padStart(2, "0")}</span>
-      <button class="rc-cancel" data-rest-cancel="${idx}">Cancelar</button>
-    `;
-    document.querySelector(`[data-rest-cancel="${idx}"]`).addEventListener("click", () => cancelRestTimer(idx));
-  };
-  render();
-
-  restTimers[idx] = setInterval(() => {
-    remaining--;
-    if (remaining <= 0) {
-      clearInterval(restTimers[idx]);
-      countdownEl.innerHTML = `<span class="rc-done">¡Descanso terminado!</span>`;
-      playBeep();
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-      setTimeout(() => {
-        if (countdownEl) countdownEl.style.display = "none";
-        if (btn) btn.style.display = "block";
-      }, 3000);
-      return;
-    }
-    render();
-  }, 1000);
-}
-
-function cancelRestTimer(idx) {
-  clearInterval(restTimers[idx]);
-  const countdownEl = document.getElementById(`rest-countdown-${idx}`);
-  const btn = document.querySelector(`[data-rest-start="${idx}"]`);
-  if (countdownEl) countdownEl.style.display = "none";
-  if (btn) btn.style.display = "block";
-}
-
-function toggleStopwatch(idx) {
-  const btn = document.querySelector(`[data-stopwatch="${idx}"]`);
-  if (!btn) return;
-  if (!stopwatches[idx] || !stopwatches[idx].running) {
-    stopwatches[idx] = { running: true, start: Date.now(), interval: null };
-    btn.innerHTML = `${ICON_STOP}<span class="sw-label">Detener (0s)</span>`;
-    btn.classList.add("running");
-    stopwatches[idx].interval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - stopwatches[idx].start) / 1000);
-      const lbl = btn.querySelector(".sw-label");
-      if (lbl) lbl.textContent = `Detener (${elapsed}s)`;
-    }, 250);
-  } else {
-    clearInterval(stopwatches[idx].interval);
-    const elapsed = Math.floor((Date.now() - stopwatches[idx].start) / 1000);
-    stopwatches[idx].running = false;
-    btn.innerHTML = `${ICON_CLOCK}<span class="sw-label">Cronometrar</span>`;
-    btn.classList.remove("running");
-    const durInput = document.querySelector(`.exercise-row[data-ex="${idx}"] .in-duration`);
-    if (durInput) durInput.value = elapsed;
+// Sesión de hoy: se crea solo si no existe, nunca se pisa por completo.
+// Cada serie se guarda de forma independiente -> añadir/quitar ejercicios nunca borra lo ya hecho.
+function ensureTodaySession(dayKey) {
+  const today = todayISO();
+  if (!store.workouts[today]) {
+    store.workouts[today] = { day: dayKey, exercises: {} };
+    saveStore(store);
   }
+  return store.workouts[today];
 }
 
 function adjustRest(dayKey, idx, delta) {
@@ -366,9 +325,254 @@ function adjustRest(dayKey, idx, delta) {
   ex.rest = Math.min(300, Math.max(15, (ex.rest || 60) + delta));
   saveStore(store);
   const valEl = document.getElementById(`rest-value-${idx}`);
-  const btnValEl = document.getElementById(`rest-btn-val-${idx}`);
   if (valEl) valEl.textContent = `${ex.rest}s`;
-  if (btnValEl) btnValEl.textContent = ex.rest;
+}
+
+// ---- Barra fija de descanso (global, no depende de qué tarjeta esté visible) ----
+function startGlobalRestTimer(seconds, exerciseName) {
+  unlockAudio();
+  if (globalRestTimer) clearInterval(globalRestTimer.interval);
+  globalRestTimer = { endsAt: Date.now() + seconds * 1000, exerciseName };
+  saveGlobalRestTimer();
+  document.getElementById("global-rest-bar").style.display = "block";
+  renderGlobalRestBar();
+  globalRestTimer.interval = setInterval(renderGlobalRestBar, 1000);
+}
+
+function saveGlobalRestTimer() {
+  if (globalRestTimer) {
+    localStorage.setItem("fitlog_rest_timer", JSON.stringify({ endsAt: globalRestTimer.endsAt, exerciseName: globalRestTimer.exerciseName }));
+  } else {
+    localStorage.removeItem("fitlog_rest_timer");
+  }
+}
+
+function renderGlobalRestBar() {
+  if (!globalRestTimer) return;
+  const remaining = Math.round((globalRestTimer.endsAt - Date.now()) / 1000);
+  const timeEl = document.getElementById("grb-time");
+  const labelEl = document.getElementById("grb-label");
+  if (!timeEl) return;
+  if (remaining <= 0) {
+    clearInterval(globalRestTimer.interval);
+    timeEl.textContent = "¡Listo!";
+    labelEl.textContent = globalRestTimer.exerciseName || "Descanso";
+    playBeep();
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    setTimeout(() => {
+      document.getElementById("global-rest-bar").style.display = "none";
+      globalRestTimer = null;
+      saveGlobalRestTimer();
+    }, 3000);
+    return;
+  }
+  const m = Math.floor(remaining / 60);
+  const s = remaining % 60;
+  timeEl.textContent = `${m}:${String(s).padStart(2, "0")}`;
+  labelEl.textContent = globalRestTimer.exerciseName || "Descanso";
+}
+
+function cancelGlobalRestTimer() {
+  if (globalRestTimer) clearInterval(globalRestTimer.interval);
+  globalRestTimer = null;
+  saveGlobalRestTimer();
+  document.getElementById("global-rest-bar").style.display = "none";
+}
+document.getElementById("grb-cancel").addEventListener("click", cancelGlobalRestTimer);
+
+// Al cargar la app: si había un descanso en marcha (aunque se recargara la página), lo recupera.
+(function restoreRestTimer() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("fitlog_rest_timer"));
+    if (saved && saved.endsAt > Date.now()) {
+      globalRestTimer = { endsAt: saved.endsAt, exerciseName: saved.exerciseName };
+      document.getElementById("global-rest-bar").style.display = "block";
+      renderGlobalRestBar();
+      globalRestTimer.interval = setInterval(renderGlobalRestBar, 1000);
+    } else {
+      localStorage.removeItem("fitlog_rest_timer");
+    }
+  } catch (e) { /* nada que recuperar */ }
+})();
+
+// ---- Timer por serie (mide cuánto tarda cada serie; en ejercicios de tiempo ES la duración) ----
+function startSetTimer(exIdx, setIdx, dayKey) {
+  unlockAudio();
+  const key = `${exIdx}-${setIdx}`;
+  const row = document.querySelector(`[data-set="${key}"]`);
+  if (!row) return;
+  const startBtn = row.querySelector(".set-start-btn");
+  const start = Date.now();
+  setTimers[key] = { start };
+
+  const doneBtn = document.createElement("button");
+  doneBtn.className = "set-done-btn";
+  doneBtn.innerHTML = `<span class="set-elapsed" id="elapsed-${key}">0:00</span>${ICON_CHECK}`;
+  doneBtn.addEventListener("click", () => finishSet(exIdx, setIdx, dayKey));
+  startBtn.replaceWith(doneBtn);
+
+  setTimers[key].interval = setInterval(() => {
+    const el = document.getElementById(`elapsed-${key}`);
+    if (!el) { clearInterval(setTimers[key].interval); return; }
+    const secs = Math.floor((Date.now() - start) / 1000);
+    el.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+  }, 250);
+}
+
+function finishSet(exIdx, setIdx, dayKey) {
+  const key = `${exIdx}-${setIdx}`;
+  if (setTimers[key]) clearInterval(setTimers[key].interval);
+  const elapsedSec = setTimers[key] ? Math.floor((Date.now() - setTimers[key].start) / 1000) : 0;
+  delete setTimers[key];
+
+  const ex = store.workoutPlan[dayKey][exIdx];
+  const isTime = ex.type === "time";
+  const session = ensureTodaySession(dayKey);
+  if (!session.exercises[ex.name]) session.exercises[ex.name] = { completed: false, sets: [] };
+  const savedEx = session.exercises[ex.name];
+
+  let setData;
+  if (isTime) {
+    setData = { duration: elapsedSec };
+  } else {
+    const wInput = document.querySelector(`[data-set-weight="${key}"]`);
+    const rInput = document.querySelector(`[data-set-reps="${key}"]`);
+    setData = {
+      w: parseFloat(wInput?.value) || 0,
+      r: parseInt(rInput?.value, 10) || 0,
+      roundTime: elapsedSec,
+    };
+  }
+  savedEx.sets[setIdx] = setData;
+  const setsCount = ex.setsCount || 3;
+  savedEx.completed = savedEx.sets.filter(Boolean).length >= setsCount;
+  saveStore(store);
+
+  startGlobalRestTimer(ex.rest || 60, ex.name);
+  renderExerciseCard(dayKey, exIdx); // solo repinta ESTA tarjeta, no toca timers de otras
+}
+
+function getDefaultWeight(savedSets, si, last) {
+  for (let k = si - 1; k >= 0; k--) {
+    if (savedSets[k]) return savedSets[k].w;
+  }
+  if (last && last.lastSet && typeof last.lastSet.w === "number") return last.lastSet.w;
+  return "";
+}
+
+function renderSetRow(exIdx, setIdx, ex, savedSet, defaultWeight) {
+  const key = `${exIdx}-${setIdx}`;
+  const isTime = ex.type === "time";
+
+  if (savedSet) {
+    const resultText = isTime
+      ? `${savedSet.duration}s`
+      : `${savedSet.w}kg × ${savedSet.r}`;
+    return `
+      <div class="set-row done" data-set="${key}">
+        <span class="set-num">S${setIdx + 1}</span>
+        <span class="set-result">${resultText}</span>
+        <span class="set-check-badge">${ICON_CHECK}</span>
+      </div>`;
+  }
+
+  const startBtn = `<button class="set-start-btn" data-set-start="${key}" aria-label="Empezar serie ${setIdx + 1}">${ICON_PLAY}</button>`;
+
+  if (isTime) {
+    return `
+      <div class="set-row" data-set="${key}">
+        <span class="set-num">S${setIdx + 1}</span>
+        <span class="set-hint">Mantener</span>
+        ${startBtn}
+      </div>`;
+  }
+
+  return `
+    <div class="set-row" data-set="${key}">
+      <span class="set-num">S${setIdx + 1}</span>
+      <input type="number" step="0.5" inputmode="decimal" class="set-weight" data-set-weight="${key}" placeholder="kg" value="${defaultWeight}">
+      <input type="number" inputmode="numeric" class="set-reps" data-set-reps="${key}" placeholder="reps">
+      ${startBtn}
+    </div>`;
+}
+
+function buildExerciseCardHTML(dayKey, exIdx) {
+  const exList = store.workoutPlan[dayKey];
+  const ex = exList[exIdx];
+  const isTime = ex.type === "time";
+  const restVal = ex.rest || 60;
+  const setsCount = ex.setsCount || 3;
+
+  const session = store.workouts[todayISO()];
+  const savedEx = (session && session.exercises[ex.name]) || { completed: false, sets: [] };
+  const last = getLastSession(dayKey, ex.name);
+
+  const doneCount = savedEx.sets.filter(Boolean).length;
+  const isCompleted = doneCount >= setsCount;
+
+  let lastText;
+  if (!last) {
+    lastText = "Sin registros previos — anota tu primera marca";
+  } else if (isTime) {
+    lastText = `Última vez (${fmtDate(last.iso)}): ${last.lastSet.duration}s · ${last.sets.length} series`;
+  } else {
+    lastText = `Última vez (${fmtDate(last.iso)}): ${last.lastSet.w}kg x ${last.lastSet.r}`;
+  }
+
+  const setsHtml = Array.from({ length: setsCount }).map((_, si) => {
+    const savedSet = savedEx.sets[si];
+    const defaultWeight = getDefaultWeight(savedEx.sets, si, last);
+    return renderSetRow(exIdx, si, ex, savedSet, defaultWeight);
+  }).join("");
+
+  return `
+    <button class="ex-remove" data-remove="${exIdx}" aria-label="Quitar ejercicio">${ICON_X}</button>
+    <div class="ex-name">${ex.name}${isCompleted ? `<span class="ex-done-badge">${ICON_CHECK} Hecho</span>` : ""}</div>
+    <div class="ex-scheme">${ex.scheme}</div>
+    <div class="ex-last">${lastText}</div>
+    <div class="ex-rest-row">
+      <span class="ex-rest-label">Descanso</span>
+      <div class="ex-rest-stepper">
+        <button type="button" data-rest-minus="${exIdx}" aria-label="Menos descanso">−</button>
+        <span class="ex-rest-value" id="rest-value-${exIdx}">${restVal}s</span>
+        <button type="button" data-rest-plus="${exIdx}" aria-label="Más descanso">+</button>
+      </div>
+    </div>
+    <div class="sets-list">${setsHtml}</div>
+  `;
+}
+
+function attachExerciseCardListeners(dayKey, exIdx) {
+  const card = document.querySelector(`.exercise-row[data-ex="${exIdx}"]`);
+  if (!card) return;
+
+  card.querySelector(`[data-remove="${exIdx}"]`)?.addEventListener("click", () => {
+    store.workoutPlan[dayKey].splice(exIdx, 1);
+    saveStore(store);
+    renderWorkoutView(dayKey);
+  });
+
+  card.querySelector(`[data-rest-minus="${exIdx}"]`)?.addEventListener("click", () => adjustRest(dayKey, exIdx, -15));
+  card.querySelector(`[data-rest-plus="${exIdx}"]`)?.addEventListener("click", () => adjustRest(dayKey, exIdx, 15));
+
+  card.querySelectorAll("[data-set-start]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const [ei, si] = btn.dataset.setStart.split("-").map(Number);
+      startSetTimer(ei, si, dayKey);
+    });
+  });
+}
+
+function renderExerciseCard(dayKey, exIdx) {
+  const card = document.querySelector(`.exercise-row[data-ex="${exIdx}"]`);
+  const ex = store.workoutPlan[dayKey][exIdx];
+  const session = store.workouts[todayISO()];
+  const savedEx = (session && session.exercises[ex.name]) || { completed: false, sets: [] };
+  const isCompleted = savedEx.sets.filter(Boolean).length >= (ex.setsCount || 3);
+  if (!card) return;
+  card.classList.toggle("completed", isCompleted);
+  card.innerHTML = buildExerciseCardHTML(dayKey, exIdx);
+  attachExerciseCardListeners(dayKey, exIdx);
 }
 
 function renderWorkoutView(dayKey) {
@@ -379,69 +583,13 @@ function renderWorkoutView(dayKey) {
 
   const dayName = WORKOUTS[dayKey].name;
   const exList = store.workoutPlan[dayKey];
-  const today = todayISO();
-  const existing = store.workouts[today];
-  const alreadyLoggedToday = existing && existing.day === dayKey;
+  ensureTodaySession(dayKey);
 
-  const rows = exList.map((ex, i) => {
-    const isTime = ex.type === "time";
-    const restVal = ex.rest || 60;
-    const last = getLastSession(dayKey, ex.name);
-    let lastText;
-    if (!last) {
-      lastText = "Sin registros previos — anota tu primera marca";
-    } else if (isTime) {
-      lastText = `Última vez (${fmtDate(last.iso)}): ${last.set.duration}seg x ${last.set.rounds} rondas`;
-    } else {
-      lastText = `Última vez (${fmtDate(last.iso)}): ${last.set.w}kg x ${last.set.r}`;
-    }
-
-    const savedSets = alreadyLoggedToday ? existing.exercises.find((e) => e.name === ex.name) : null;
-    let w0 = "", r0 = "", d0 = "", rd0 = "";
-    if (savedSets && savedSets.sets[0]) {
-      if (isTime) { d0 = savedSets.sets[0].duration; rd0 = savedSets.sets[0].rounds; }
-      else { w0 = savedSets.sets[0].w; r0 = savedSets.sets[0].r; }
-    }
-
-    const inputsHtml = isTime ? `
-      <div class="set-inputs">
-        <input type="number" inputmode="numeric" placeholder="Duración (seg)" class="in-duration" value="${d0}">
-        <input type="number" inputmode="numeric" placeholder="Rondas" class="in-rounds" value="${rd0}">
-      </div>
-      <button class="ghost stopwatch-btn" data-stopwatch="${i}">${ICON_CLOCK}<span class="sw-label">Cronometrar</span></button>
-    ` : `
-      <div class="set-inputs">
-        <input type="number" step="0.5" inputmode="decimal" placeholder="Peso (kg)" class="in-weight" value="${w0}">
-        <input type="number" inputmode="numeric" placeholder="Reps" class="in-reps" value="${r0}">
-      </div>
-    `;
-
-    return `
-      <div class="exercise-row" data-ex="${i}">
-        <button class="ex-remove" data-remove="${i}" aria-label="Quitar ejercicio">${ICON_X}</button>
-        <div class="ex-name">${ex.name}</div>
-        <div class="ex-scheme">${ex.scheme}</div>
-        <div class="ex-last">${lastText}</div>
-        <div class="ex-rest-row">
-          <span class="ex-rest-label">Descanso</span>
-          <div class="ex-rest-stepper">
-            <button type="button" data-rest-minus="${i}" aria-label="Menos descanso">−</button>
-            <span class="ex-rest-value" id="rest-value-${i}">${restVal}s</span>
-            <button type="button" data-rest-plus="${i}" aria-label="Más descanso">+</button>
-          </div>
-        </div>
-        ${inputsHtml}
-        <div class="rest-timer">
-          <button class="rest-start-btn" data-rest-start="${i}">${ICON_PLAY}Iniciar descanso (<span id="rest-btn-val-${i}">${restVal}</span>s)</button>
-          <div class="rest-countdown" id="rest-countdown-${i}" style="display:none;"></div>
-        </div>
-      </div>`;
-  }).join("");
+  const cardsHtml = exList.map((ex, i) => `<div class="exercise-row" data-ex="${i}"></div>`).join("");
 
   document.getElementById("workout-card").innerHTML = `
-    <h2>${dayName} <span class="tag">${alreadyLoggedToday ? "guardado hoy" : todayISO()}</span></h2>
-    ${rows || '<p class="empty-note">Sin ejercicios en este día — añade alguno abajo.</p>'}
-    <button class="primary" id="save-workout">Guardar sesión de hoy</button>
+    <h2>${dayName} <span class="tag">${todayISO()}</span></h2>
+    ${cardsHtml || '<p class="empty-note">Sin ejercicios en este día — añade alguno abajo.</p>'}
 
     <div class="add-exercise">
       <div class="add-exercise-inputs">
@@ -451,55 +599,37 @@ function renderWorkoutView(dayKey) {
           <option value="reps">Reps y peso</option>
           <option value="time">Tiempo (ej. plancha)</option>
         </select>
-        <input type="number" id="new-ex-rest" placeholder="Descanso (seg)" value="60">
+        <div class="add-exercise-row2">
+          <input type="number" id="new-ex-sets" placeholder="Nº series" value="3" min="1" max="10">
+          <input type="number" id="new-ex-rest" placeholder="Descanso (seg)" value="60">
+        </div>
       </div>
       <button class="ghost" id="add-exercise-btn" style="width:100%;">+ Añadir ejercicio</button>
     </div>
     <button class="ghost" id="reset-day-btn" style="width:100%;margin-top:8px;">Restaurar plantilla original de ${dayName}</button>
   `;
 
+  exList.forEach((_, i) => renderExerciseCard(dayKey, i));
+
   document.querySelectorAll("#workout-pills .pill").forEach((p) => {
     p.addEventListener("click", () => renderWorkoutView(p.dataset.day));
-  });
-
-  document.querySelectorAll(".ex-remove").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const idx = parseInt(btn.dataset.remove, 10);
-      store.workoutPlan[dayKey].splice(idx, 1);
-      saveStore(store);
-      renderWorkoutView(dayKey);
-    });
-  });
-
-  document.querySelectorAll("[data-rest-minus]").forEach((btn) => {
-    btn.addEventListener("click", () => adjustRest(dayKey, parseInt(btn.dataset.restMinus, 10), -15));
-  });
-  document.querySelectorAll("[data-rest-plus]").forEach((btn) => {
-    btn.addEventListener("click", () => adjustRest(dayKey, parseInt(btn.dataset.restPlus, 10), 15));
-  });
-
-  document.querySelectorAll("[data-rest-start]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const idx = parseInt(btn.dataset.restStart, 10);
-      startRestTimer(idx, exList[idx].rest || 60);
-    });
-  });
-
-  document.querySelectorAll(".stopwatch-btn").forEach((btn) => {
-    btn.addEventListener("click", () => toggleStopwatch(parseInt(btn.dataset.stopwatch, 10)));
   });
 
   document.getElementById("add-exercise-btn").addEventListener("click", () => {
     const nameInput = document.getElementById("new-ex-name");
     const schemeInput = document.getElementById("new-ex-scheme");
     const typeSel = document.getElementById("new-ex-type");
+    const setsInput = document.getElementById("new-ex-sets");
     const restInput = document.getElementById("new-ex-rest");
     const name = nameInput.value.trim();
     const scheme = schemeInput.value.trim() || "3 x 10-12";
     const type = typeSel.value;
+    const setsCount = parseInt(setsInput.value, 10) || 3;
     const rest = parseInt(restInput.value, 10) || 60;
     if (!name) { nameInput.focus(); return; }
-    store.workoutPlan[dayKey].push({ name, scheme, type, rest });
+    // Solo modifica la plantilla (workoutPlan); las series ya guardadas de otros
+    // ejercicios viven en session.exercises por nombre y no se tocan aquí.
+    store.workoutPlan[dayKey].push({ name, scheme, type, rest, setsCount });
     saveStore(store);
     renderWorkoutView(dayKey);
   });
@@ -509,34 +639,7 @@ function renderWorkoutView(dayKey) {
     saveStore(store);
     renderWorkoutView(dayKey);
   });
-
-  document.getElementById("save-workout").addEventListener("click", () => {
-    const exercises = [];
-    document.querySelectorAll("#workout-card .exercise-row").forEach((row, i) => {
-      const ex = exList[i];
-      if (ex.type === "time") {
-        const dVal = parseInt(row.querySelector(".in-duration").value, 10);
-        const rdVal = parseInt(row.querySelector(".in-rounds").value, 10);
-        exercises.push({
-          name: ex.name,
-          sets: (!isNaN(dVal) && !isNaN(rdVal)) ? [{ duration: dVal, rounds: rdVal }] : [],
-        });
-      } else {
-        const wVal = parseFloat(row.querySelector(".in-weight").value);
-        const rVal = parseInt(row.querySelector(".in-reps").value, 10);
-        exercises.push({
-          name: ex.name,
-          sets: (!isNaN(wVal) && !isNaN(rVal)) ? [{ w: wVal, r: rVal }] : [],
-        });
-      }
-    });
-    store.workouts[todayISO()] = { day: dayKey, exercises };
-    saveStore(store);
-    renderWorkoutView(dayKey);
-    renderHoy();
-  });
 }
-
 // ================= Vista: PESO =================
 function renderWeightView() {
   const input = document.getElementById("weight-input");
@@ -653,8 +756,8 @@ window.addEventListener("resize", () => {
 });
 
 // ================= Init =================
-document.addEventListener("touchstart", () => getAudioContext(), { once: true, passive: true });
-document.addEventListener("click", () => getAudioContext(), { once: true });
+document.addEventListener("touchstart", () => unlockAudio(), { once: true, passive: true });
+document.addEventListener("click", () => unlockAudio(), { once: true });
 mealSelectedDay = dayNameEs(new Date());
 renderHoy();
 renderWorkoutView("A");
