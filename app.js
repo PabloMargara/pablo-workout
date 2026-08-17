@@ -111,14 +111,11 @@ function renderMealCardHTML(dayName, isToday) {
       </div>`;
   }).join("");
 
-  const kcalClass = Math.abs(totalKcal - TARGETS.kcal) <= 150 ? "on-target" : "off-target";
-  const protClass = totalProt >= TARGETS.protein - 10 ? "on-target" : "off-target";
-
   return `
     <h2>${isToday ? "Comidas de hoy" : dayName} <span class="tag">${dayName}</span></h2>
     <div class="macro-grid" style="margin-bottom:14px;">
-      <div class="macro-box ${kcalClass}"><div class="val">${totalKcal}</div><div class="lbl">Kcal día</div></div>
-      <div class="macro-box ${protClass}"><div class="val">${totalProt}g</div><div class="lbl">Proteína</div></div>
+      <div class="macro-box kcal-box"><div class="val">${totalKcal}</div><div class="lbl">Kcal día</div></div>
+      <div class="macro-box protein-box"><div class="val">${totalProt}g</div><div class="lbl">Proteína</div></div>
       <div class="macro-box"><div class="val">${TARGETS.kcal}</div><div class="lbl">Objetivo</div></div>
       <div class="macro-box"><div class="val">${TARGETS.protein}g</div><div class="lbl">Objetivo</div></div>
     </div>
@@ -661,7 +658,11 @@ function renderWeightView() {
 function renderWeightHistory() {
   const el = document.getElementById("weight-history");
   if (!store.weights.length) {
-    el.innerHTML = `<p class="empty-note">Aún no hay pesadas registradas.</p>`;
+    el.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v4l3 2"/></svg></div>
+        <p class="empty-note">Aún no hay pesadas registradas.</p>
+      </div>`;
     return;
   }
   const rows = [...store.weights].reverse().slice(0, 20).map(
