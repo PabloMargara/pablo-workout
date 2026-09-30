@@ -3,81 +3,104 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#10141f">
-<title>Cuaderno — plan 12 semanas</title>
+<meta name="theme-color" content="#070a12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Neon Circuit — plan 12 semanas</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-<header class="app-header">
-  <div class="stamp">Ciclo · 12 semanas</div>
-  <h1>Cuaderno de entrenamiento</h1>
-  <p>Registro de fuerza, peso y comidas</p>
-</header>
 
 <main>
 
   <!-- ================= HOY ================= -->
   <section class="view active" id="view-hoy">
-    <div class="card" id="hoy-resumen"></div>
+    <header class="view-header" id="hoy-header"></header>
+    <div class="week-strip" id="hoy-week"></div>
+    <div class="stat-grid" id="hoy-stats"></div>
+    <div class="card" id="hoy-entreno"></div>
+    <div class="card alt" id="hoy-progreso"></div>
     <div class="card" id="hoy-comidas"></div>
-    <div class="card" id="hoy-manana"></div>
+    <div class="card alt" id="hoy-manana"></div>
   </section>
 
   <!-- ================= ENTRENO ================= -->
   <section class="view" id="view-entreno">
+    <header class="view-header" id="entreno-header"></header>
+    <div class="session-bar"><div class="session-bar-fill" id="session-bar-fill"></div></div>
     <div class="pillrow" id="workout-pills"></div>
-    <div class="card" id="workout-card"></div>
+    <div id="workout-card"></div>
+  </section>
+
+  <!-- ================= HISTORIAL ================= -->
+  <section class="view" id="view-historial">
+    <header class="view-header" id="hist-header"></header>
+    <div class="card" id="hist-calendar"></div>
+    <div class="card" id="hist-progress"></div>
+    <div class="card alt" id="hist-sessions"></div>
+    <div class="card alt" id="hist-data"></div>
   </section>
 
   <!-- ================= PESO ================= -->
   <section class="view" id="view-peso">
+    <header class="view-header">
+      <div class="eyebrow">Peso corporal · 3x/semana o más</div>
+      <h1 class="display">Peso</h1>
+    </header>
     <div class="card">
-      <h2>Registrar peso <span class="tag">3x/semana o más</span></h2>
       <div class="weight-input-row">
         <input type="number" step="0.1" inputmode="decimal" id="weight-input" placeholder="Ej. 79.4">
-        <button id="weight-save">Guardar</button>
+        <button id="weight-save" class="btn-accent">Guardar</button>
       </div>
       <div class="chart-wrap"><canvas id="weight-chart"></canvas></div>
       <div class="trend-readout" id="weight-trend"></div>
     </div>
-    <div class="card">
-      <h2>Historial</h2>
+    <div class="card alt">
+      <div class="card-label">Historial de pesadas</div>
       <div class="weight-history" id="weight-history"></div>
     </div>
   </section>
 
   <!-- ================= COMIDAS ================= -->
   <section class="view" id="view-comidas">
+    <header class="view-header">
+      <div class="eyebrow" id="comidas-eyebrow">Plan de comidas</div>
+      <h1 class="display">Comidas</h1>
+    </header>
     <div class="pillrow" id="meal-mode-pills">
       <button class="pill active" data-mode="dia">Día</button>
       <button class="pill" data-mode="semana">Semana</button>
+      <button class="pill" data-mode="compra">Compra</button>
     </div>
     <div id="meal-day-pills-wrap">
       <div class="pillrow" id="meal-pills"></div>
     </div>
     <div class="card" id="meal-card"></div>
-  </section>
 
-  <!-- ================= COMPRA ================= -->
-  <section class="view" id="view-compra">
-    <div class="card">
-      <h2>¿Qué días quieres comprar? <span class="tag">marca los que apliquen</span></h2>
-      <div class="daycheck-grid" id="compra-daychecks"></div>
-      <button class="ghost" id="compra-select-all" style="margin-top:10px;width:100%;">Marcar / desmarcar todos</button>
+    <div id="compra-wrap" style="display:none;">
+      <div class="card">
+        <div class="card-label">¿Qué días quieres comprar?</div>
+        <div class="daycheck-grid" id="compra-daychecks"></div>
+        <button class="ghost" id="compra-select-all" style="margin-top:12px;width:100%;">Marcar / desmarcar todos</button>
+      </div>
+      <div class="card alt" id="compra-list"></div>
     </div>
-    <div class="card" id="compra-list"></div>
   </section>
 
 </main>
 
-<!-- ================= Barra fija de descanso (visible en cualquier scroll) ================= -->
+<!-- Barra fija de descanso -->
 <div class="global-rest-bar" id="global-rest-bar" style="display:none;">
   <div class="grb-inner">
-    <span class="grb-label" id="grb-label">Descanso</span>
+    <div class="grb-text">
+      <span class="grb-label" id="grb-label">Descanso</span>
+      <span class="grb-sub" id="grb-sub"></span>
+    </div>
     <span class="grb-time" id="grb-time">0:00</span>
     <button class="grb-plus30" id="grb-plus30">+30s</button>
-    <button class="grb-cancel" id="grb-cancel">Saltar</button>
+    <button class="grb-cancel" id="grb-cancel" aria-label="Saltar descanso">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
   </div>
 </div>
 
@@ -90,6 +113,10 @@
     <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="12" x2="18" y2="12"/><rect x="2" y="8" width="3" height="8" rx="1"/><rect x="19" y="8" width="3" height="8" rx="1"/><rect x="5" y="9.5" width="2" height="5"/><rect x="17" y="9.5" width="2" height="5"/></svg>
     <span>Entreno</span>
   </button>
+  <button data-view="historial">
+    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+    <span>Historial</span>
+  </button>
   <button data-view="peso">
     <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v4l3 2"/></svg>
     <span>Peso</span>
@@ -97,10 +124,6 @@
   <button data-view="comidas">
     <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2v7a2 2 0 0 0 4 0V2"/><path d="M9 9v13"/><path d="M16 2c-1.4 0-2 1.3-2 3v4c0 1 .9 2 2 2v9"/></svg>
     <span>Comidas</span>
-  </button>
-  <button data-view="compra">
-    <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.3 12a2 2 0 0 0 2 1.6h8.4a2 2 0 0 0 2-1.5L21 8H6.2"/></svg>
-    <span>Compra</span>
   </button>
 </nav>
 
